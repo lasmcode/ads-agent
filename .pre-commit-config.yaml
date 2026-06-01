@@ -1,0 +1,50 @@
+# =============================================================================
+# ADS Agent — Pre-Commit Hooks Configuration
+# Run: uv run pre-commit install (to activate locally)
+# Run manually: uv run pre-commit run --all-files
+# =============================================================================
+
+default_language_version:
+  python: python3.14
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Standard hooks — file hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--unsafe"]         # Allow custom YAML tags (Docker Compose)
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: debug-statements       # Prevents accidental breakpoint() or pdb
+      - id: detect-private-key     # Prevents committing secrets
+
+  # ---------------------------------------------------------------------------
+  # Ruff — linter + formatter (replaces flake8, black, isort)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+      - id: ruff                   # Linter — runs first
+        args: ["--fix"]            # Auto-fix safe issues
+      - id: ruff-format            # Formatter — runs after linter
+
+  # ---------------------------------------------------------------------------
+  # Local hooks — Type Checking with access to uv virtualenv
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
