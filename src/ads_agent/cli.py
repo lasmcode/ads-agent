@@ -115,6 +115,8 @@ async def _run_pipeline(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns process exit code."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = _build_parser()
     args = parser.parse_args(argv)
 
