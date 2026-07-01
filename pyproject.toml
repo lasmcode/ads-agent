@@ -47,7 +47,7 @@ dev = [
 # ===========================================================================
 
 [project.scripts]
-ads-agent = "ads_agent.api.main:run"
+ads-agent = "ads_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ads_agent"]
@@ -73,6 +73,10 @@ force-sort-within-sections = true
 "tests/**/*.py" = [
     "S101",  # assert statements are fine in tests
     "N802",  # lowercase function names in tests
+]
+"src/ads_agent/agents/state.py" = [
+    "TC001",  # LangGraph resolves TypedDict annotations at runtime
+    "TC002",
 ]
 
 [tool.ruff.format]

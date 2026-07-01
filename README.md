@@ -84,6 +84,26 @@ make test            # All tests
 make test-cov        # With coverage report
 ```
 
+### 5. Run the pipeline locally
+
+```bash
+# Text output (default)
+uv run ads-agent run "Should I use pgvector or Qdrant for my RAG system?"
+
+# JSON output
+uv run ads-agent run "Should I use pgvector or Qdrant for my RAG system?" --output json
+
+# Resumable run with checkpoint thread ID
+uv run ads-agent run "Should I use pgvector or Qdrant?" --thread-id my-session-1
+```
+
+Optional environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `ADS_MAX_ITERATIONS` | `5` | Circuit breaker limit for supervisor loops |
+| `ADS_LOG_LEVEL` | `INFO` | Logging level |
+
 ## Development Commands
 
 ```bash
@@ -129,7 +149,7 @@ Access the Langfuse UI at `http://localhost:3000` after `make docker-up`.
 ## Roadmap
 
 - [x] Phase 0 — Project bootstrap
-- [ ] Phase 1 — Supervisor Agent with LangGraph
+- [x] Phase 1 — Supervisor Agent with LangGraph
 - [ ] Phase 2 — MCP Tool Layer
 - [ ] Phase 3 — RAG Pipeline with pgvector
 - [ ] Phase 4 — Full Multi-Agent System
