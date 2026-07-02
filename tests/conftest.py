@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def pytest_asyncio_loop_factories(
     config: Config,
     item: Item,
-) -> dict[str, asyncio.SelectorEventLoop] | None:
+) -> dict[str, type[asyncio.AbstractEventLoop]]:
     """
     Use SelectorEventLoop on Windows so psycopg async tests can connect.
 
@@ -23,4 +23,4 @@ def pytest_asyncio_loop_factories(
     """
     if sys.platform == "win32":
         return {"default": asyncio.SelectorEventLoop}
-    return None
+    return {"default": asyncio.new_event_loop}
