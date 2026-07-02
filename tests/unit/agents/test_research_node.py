@@ -113,11 +113,18 @@ class TestResearchNode:
         }
 
         monkeypatch.setattr(
-            "ads_agent.agents.research.nodes.create_react_agent",
-            lambda model, tools, prompt: mock_agent,
+            "ads_agent.agents.research.nodes.create_agent",
+            lambda model, tools, system_prompt=None, **kwargs: mock_agent,
         )
         monkeypatch.setattr(
             "ads_agent.agents.research.nodes.get_mcp_tools",
+            AsyncMock(return_value=[]),
+        )
+        # Isolate from the knowledge base (Phase 3) — its own behavior is
+        # covered by test_retrieve_rag_context_* below and the RRF/chunker
+        # unit tests; this test only cares about the ReAct agent contract.
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.hybrid_search",
             AsyncMock(return_value=[]),
         )
 
@@ -127,3 +134,102 @@ class TestResearchNode:
         assert result.input_tokens == 5
         assert result.output_tokens == 3
         mock_agent.ainvoke.assert_awaited_once()
+
+    async def test_run_research_agent_prepends_high_confidence_rag_context(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """High-confidence knowledge-base chunks are prepended to the agent's query."""
+        from ads_agent.core.entities.chunk import Chunk
+        from ads_agent.core.settings import get_settings
+
+        threshold = get_settings().rag_score_threshold
+        chunk = Chunk(
+            id="chunk-1",
+            source_url="https://docs.example.com/langgraph/persistence",
+            title="Checkpointer vs. store",
+            content="Checkpointers persist a thread's graph state.",
+            score=threshold + 0.01,
+        )
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.hybrid_search",
+            AsyncMock(return_value=[chunk]),
+        )
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {
+            "messages": [AIMessage(content="Research complete.")],
+        }
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.create_agent",
+            lambda model, tools, system_prompt=None, **kwargs: mock_agent,
+        )
+
+        result = await run_research_agent("test query", tools=[])
+
+        sent_message = mock_agent.ainvoke.call_args[0][0]["messages"][0]
+        assert "UNTRUSTED INTERNAL KNOWLEDGE BASE CONTEXT" in sent_message.content
+        assert "Checkpointers persist a thread's graph state." in sent_message.content
+        assert "test query" in sent_message.content
+        assert "https://docs.example.com/langgraph/persistence" in result.source_urls
+
+    async def test_run_research_agent_skips_low_confidence_rag_context(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Chunks below the confidence threshold are not injected into the query."""
+        from ads_agent.core.entities.chunk import Chunk
+        from ads_agent.core.settings import get_settings
+
+        threshold = get_settings().rag_score_threshold
+        chunk = Chunk(
+            id="chunk-1",
+            source_url="https://docs.example.com/low-confidence",
+            title="Tangentially related",
+            content="Not very relevant content.",
+            score=threshold / 2,
+        )
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.hybrid_search",
+            AsyncMock(return_value=[chunk]),
+        )
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {
+            "messages": [AIMessage(content="Research complete.")],
+        }
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.create_agent",
+            lambda model, tools, system_prompt=None, **kwargs: mock_agent,
+        )
+
+        result = await run_research_agent("test query", tools=[])
+
+        sent_message = mock_agent.ainvoke.call_args[0][0]["messages"][0]
+        assert sent_message.content == "test query"
+        assert "https://docs.example.com/low-confidence" not in result.source_urls
+
+    async def test_run_research_agent_tolerates_rag_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A knowledge-base failure (e.g. Postgres unreachable) must not fail research."""
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.hybrid_search",
+            AsyncMock(side_effect=ConnectionError("could not connect to server")),
+        )
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {
+            "messages": [AIMessage(content="Research complete.")],
+        }
+        monkeypatch.setattr(
+            "ads_agent.agents.research.nodes.create_agent",
+            lambda model, tools, system_prompt=None, **kwargs: mock_agent,
+        )
+
+        result = await run_research_agent("test query", tools=[])
+
+        assert result.output == "Research complete."
+        sent_message = mock_agent.ainvoke.call_args[0][0]["messages"][0]
+        assert sent_message.content == "test query"

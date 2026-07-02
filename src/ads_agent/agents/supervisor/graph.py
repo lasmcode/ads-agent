@@ -20,7 +20,10 @@ Graph topology:
 Key design decisions:
   - All workers unconditionally return to supervisor after completion
   - The supervisor holds all routing logic (conditional edges)
-  - MemorySaver checkpointer in Phase 1 → AsyncPostgresSaver in Phase 3
+  - MemorySaver checkpointer in Phase 1-2 → AsyncPostgresSaver in Phase 3
+    (see infrastructure/checkpointer.py::get_postgres_checkpointer). The
+    checkpointer parameter accepts any BaseCheckpointSaver so tests keep
+    injecting a fast, DB-free MemorySaver.
   - graph.compile() validates edge connectivity at startup, not at runtime
 """
 
@@ -41,6 +44,7 @@ from ads_agent.agents.writer.nodes import writer_node
 from ads_agent.core.entities.execution_receipt import ExecutionReceipt
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.graph.state import CompiledStateGraph
 
     from ads_agent.core.entities.decision_request import DecisionRequest
@@ -48,14 +52,15 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-def build_graph(checkpointer: MemorySaver | None = None) -> CompiledStateGraph:
+def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
     """
     Build and compile the ADS Agent StateGraph.
 
     Accepts an optional checkpointer for dependency injection:
-    - Tests inject MemorySaver directly
-    - Production injects AsyncPostgresSaver (Phase 3)
-    - None = no persistence (useful for one-shot runs)
+    - Tests inject MemorySaver directly (fast, no DB required)
+    - Production injects AsyncPostgresSaver (Phase 3) via
+      infrastructure/checkpointer.py::get_postgres_checkpointer
+    - None defaults to a fresh MemorySaver (no persistence across processes)
 
     Returns a compiled graph ready for invocation.
     """
@@ -101,7 +106,7 @@ def build_graph(checkpointer: MemorySaver | None = None) -> CompiledStateGraph:
 async def run_pipeline(
     request: DecisionRequest,
     thread_id: str | None = None,
-    checkpointer: MemorySaver | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> tuple[AgentState, ExecutionReceipt]:
     """
     Execute the full agent pipeline for a given DecisionRequest.
@@ -109,7 +114,8 @@ async def run_pipeline(
     Args:
         request: The validated user query.
         thread_id: Optional ID for checkpointing (resumes prior conversation).
-        checkpointer: Injected checkpointer — defaults to MemorySaver.
+        checkpointer: Injected checkpointer — defaults to MemorySaver. Pass
+            `await get_postgres_checkpointer()` for durable persistence.
 
     Returns:
         Tuple of (final_state, receipt) for the caller to use.

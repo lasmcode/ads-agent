@@ -12,6 +12,7 @@ ADS Agent orchestrates specialized AI agents to answer questions like:
 - _"Redis or Valkey — what are the real trade-offs in 2026?"_
 
 Each query produces two outputs:
+
 1. **Decision Report** — structured analysis with evidence, trade-offs, and a recommendation
 2. **Execution Receipt** — operational metadata: time per agent, tokens consumed, cost estimate, sources consulted, quality scores
 
@@ -32,16 +33,16 @@ LangGraph Supervisor Agent
 
 ## Tech Stack
 
-| Layer | Technology | Version |
-|---|---|---|
-| Agent Framework | LangGraph | 1.2.2 |
-| Tool Protocol | MCP SDK + FastMCP | 1.27.2 |
-| LLM Abstraction | LiteLLM | ≥1.70 |
-| API | FastAPI + Pydantic v2 | 0.136.3 |
-| Vector Store | PostgreSQL + pgvector | pg16 |
-| Observability | Langfuse v4 | 4.7.1 |
-| Package Manager | uv | 0.11.16 |
-| Linter/Formatter | Ruff | 0.15.15 |
+| Layer            | Technology            | Version |
+| ---------------- | --------------------- | ------- |
+| Agent Framework  | LangGraph             | 1.2.2   |
+| Tool Protocol    | MCP SDK + FastMCP     | 1.27.2  |
+| LLM Abstraction  | LiteLLM               | ≥1.70   |
+| API              | FastAPI + Pydantic v2 | 0.136.3 |
+| Vector Store     | PostgreSQL + pgvector | pg16    |
+| Observability    | Langfuse v4           | 4.7.1   |
+| Package Manager  | uv                    | 0.11.16 |
+| Linter/Formatter | Ruff                  | 0.15.15 |
 
 ## Quick Start
 
@@ -64,8 +65,8 @@ make dev
 ### 2. Configure environment
 
 ```bash
-cp docker/.env.example .env
-# Edit .env with your API keys
+cp .env.example .env
+# Edit .env with your API keys and Postgres credentials
 ```
 
 ### 3. Start local services
@@ -99,10 +100,15 @@ uv run ads-agent run "Should I use pgvector or Qdrant?" --thread-id my-session-1
 
 Optional environment variables:
 
-| Variable | Default | Description |
-|---|---|---|
-| `ADS_MAX_ITERATIONS` | `5` | Circuit breaker limit for supervisor loops |
-| `ADS_LOG_LEVEL` | `INFO` | Logging level |
+| Variable                  | Default                                              | Description                                |
+| ------------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| `POSTGRES_DB`             | `adsagent`                                           | Docker Postgres database name              |
+| `POSTGRES_USER`           | `adsagent`                                           | Docker Postgres user                       |
+| `POSTGRES_PASSWORD`       | `adsagent`                                           | Docker Postgres password                   |
+| `POSTGRES_PORT`           | `5432`                                               | Host port mapped to Postgres               |
+| `ADS_DATABASE_URL`        | `postgresql://adsagent:adsagent@localhost:5432/adsagent` | App connection string (must match Postgres) |
+| `ADS_MAX_ITERATIONS`      | `5`                                                  | Circuit breaker limit for supervisor loops |
+| `ADS_LOG_LEVEL`           | `INFO`                                               | Logging level                              |
 
 ## Development Commands
 
@@ -150,8 +156,8 @@ Access the Langfuse UI at `http://localhost:3000` after `make docker-up`.
 
 - [x] Phase 0 — Project bootstrap
 - [x] Phase 1 — Supervisor Agent with LangGraph
-- [ ] Phase 2 — MCP Tool Layer
-- [ ] Phase 3 — RAG Pipeline with pgvector
+- [x] Phase 2 — MCP Tool Layer
+- [x] Phase 3 — RAG Pipeline with pgvector
 - [ ] Phase 4 — Full Multi-Agent System
 - [ ] Phase 5 — Langfuse Observability
 - [ ] Phase 6 — Evaluation Engine
