@@ -13,14 +13,18 @@ dependencies = [
     "httpx>=0.28.1",
     "langchain>=1.3.2",
     "langchain-core>=1.4.0",
+    "langchain-litellm>=0.3.0",
+    "langchain-mcp-adapters>=0.1.0",
     "langfuse>=4.7.1",
     "langgraph>=1.2.2",
+    "langgraph-prebuilt>=1.1.0",
     "litellm>=1.86.2",
     "mcp>=1.27.2",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
     "python-dotenv>=1.2.2",
     "structlog>=25.5.0",
+    "trafilatura>=2.0.0",
     "uvicorn>=0.48.0",
 ]
 
@@ -48,6 +52,7 @@ dev = [
 
 [project.scripts]
 ads-agent = "ads_agent.cli:main"
+ads-agent-mcp = "ads_agent.infrastructure.mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ads_agent"]

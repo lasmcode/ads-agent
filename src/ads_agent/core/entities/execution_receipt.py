@@ -9,8 +9,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, computed_field
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 class AgentStatus(StrEnum):
@@ -71,6 +75,7 @@ class ExecutionReceipt(BaseModel):
 
     # Aggregate counters (computed from agents list)
     sources_consulted: int = Field(default=0)
+    source_urls: list[str] = Field(default_factory=list)
     iterations: int = Field(default=0)
     circuit_breaker_triggered: bool = Field(default=False)
 
@@ -109,6 +114,14 @@ class ExecutionReceipt(BaseModel):
         """Register metrics from a completed agent node."""
         self.agents.append(metrics)
 
+    def add_consulted_sources(self, urls: Iterable[str]) -> None:
+        """Record unique source URLs consulted during research."""
+        for url in urls:
+            normalized = url.rstrip("/")
+            if normalized and normalized not in self.source_urls:
+                self.source_urls.append(normalized)
+        self.sources_consulted = len(self.source_urls)
+
     def to_summary(self) -> dict:
         """Human-readable summary for logging and API responses."""
         return {
@@ -118,6 +131,7 @@ class ExecutionReceipt(BaseModel):
             "total_tokens": self.total_tokens,
             "estimated_cost_usd": self.estimated_cost_usd,
             "sources_consulted": self.sources_consulted,
+            "source_urls": self.source_urls,
             "circuit_breaker_triggered": self.circuit_breaker_triggered,
             "trace_id": self.trace_id,
         }
