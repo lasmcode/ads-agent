@@ -9,13 +9,14 @@ Switch to streamable-http for Phase 8 deployment via ADS_MCP_TRANSPORT.
 from __future__ import annotations
 
 import os
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastmcp import FastMCP
 from pydantic import Field
 import structlog
 
 from ads_agent.core.settings import get_settings
+from ads_agent.core.tech_docs import TechDocSource, tech_doc_sources_description
 from ads_agent.infrastructure.mcp.docs import search_tech_docs_impl
 from ads_agent.infrastructure.mcp.extract import fetch_url_impl
 from ads_agent.infrastructure.mcp.logging_config import configure_stdio_logging
@@ -104,9 +105,9 @@ async def search_tech_docs(
         ),
     ],
     source: Annotated[
-        Literal["langgraph", "mcp", "postgres", "fastapi"],
+        TechDocSource,
         Field(
-            description=("Documentation source to search: langgraph, mcp, postgres, or fastapi"),
+            description=(f"Documentation source to search: {tech_doc_sources_description()}"),
             examples=["langgraph"],
         ),
     ],

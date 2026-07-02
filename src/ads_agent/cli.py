@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import sys
 from typing import TYPE_CHECKING
 
 from ads_agent.agents.supervisor.graph import run_pipeline
 from ads_agent.core.entities.decision_request import DecisionRequest
+from ads_agent.infrastructure.asyncio_compat import run as run_async
+from ads_agent.infrastructure.checkpointer import close_checkpointer_pool, get_postgres_checkpointer
+from ads_agent.infrastructure.vector_store.connection import close_pool as close_vector_store_pool
 
 if TYPE_CHECKING:
     from ads_agent.agents.state import AgentState
@@ -100,10 +102,20 @@ def _format_json_output(
 
 async def _run_pipeline(args: argparse.Namespace) -> int:
     request = DecisionRequest(query=args.query)
-    final_state, receipt = await run_pipeline(
-        request=request,
-        thread_id=args.thread_id,
-    )
+
+    try:
+        checkpointer = await get_postgres_checkpointer()
+        final_state, receipt = await run_pipeline(
+            request=request,
+            thread_id=args.thread_id,
+            checkpointer=checkpointer,
+        )
+    finally:
+        # A CLI invocation is a single process/one-shot run — release both
+        # pools before exiting instead of leaving connections open until
+        # the interpreter tears down (which would print pool warnings).
+        await close_checkpointer_pool()
+        await close_vector_store_pool()
 
     if args.output == "json":
         print(_format_json_output(final_state, receipt))
@@ -121,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        return asyncio.run(_run_pipeline(args))
+        return run_async(_run_pipeline(args))
 
     parser.print_help()
     return 1

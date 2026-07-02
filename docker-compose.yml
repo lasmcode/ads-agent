@@ -1,0 +1,36 @@
+# =============================================================================
+# ADS Agent — local development services
+# Usage: make docker-up / docker-down (see Makefile)
+#
+# Phase 3 scope: PostgreSQL 16 + pgvector for the RAG pipeline and the
+# LangGraph checkpointer. Langfuse (observability) is a Phase 5 concern and
+# is intentionally left out here to keep this compose file focused.
+#
+# Postgres credentials are read from the project-root .env file (see
+# .env.example). Defaults match local dev if variables are unset.
+# =============================================================================
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ads-agent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-adsagent}
+      POSTGRES_USER: ${POSTGRES_USER:-adsagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adsagent}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-adsagent} -d ${POSTGRES_DB:-adsagent}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

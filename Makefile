@@ -34,7 +34,7 @@ dev: install ## Full dev setup: install deps + pre-commit hooks
 	uv run pre-commit install
 	@echo ""
 	@echo "  ✅ Dev environment ready."
-	@echo "  Next: copy docker/.env.example to .env and fill in your values."
+	@echo "  Next: copy .env.example to .env and fill in your values."
 	@echo ""
 
 # -----------------------------------------------------------------------------
