@@ -158,11 +158,53 @@ Access the Langfuse UI at `http://localhost:3000` after `make docker-up`.
 - [x] Phase 1 — Supervisor Agent with LangGraph
 - [x] Phase 2 — MCP Tool Layer
 - [x] Phase 3 — RAG Pipeline with pgvector
-- [ ] Phase 4 — Full Multi-Agent System
+- [x] Phase 4 — Full Multi-Agent System (LiteLLM tiered models)
 - [ ] Phase 5 — Langfuse Observability
 - [ ] Phase 6 — Evaluation Engine
 - [ ] Phase 7 — FastAPI Gateway
 - [ ] Phase 8 — Docker + CI/CD deployment
+
+## Phase 4 — Tiered LLM Strategy
+
+| Role | Default model | Env var |
+| --- | --- | --- |
+| Supervisor (ambiguous routing) | `gemini/gemini-2.5-pro` | `ADS_LLM_SUPERVISOR_MODEL` |
+| Workers (research, analysis, writer) | `gemini/gemini-2.5-flash` | `ADS_LLM_WORKER_MODEL` / `ADS_RESEARCH_MODEL` |
+
+Deterministic Python rules remain the circuit breaker. The supervisor LLM is consulted only when outputs look insufficient (short text, insufficiency markers, invalid analysis JSON).
+
+### Estimated cost per full pipeline run
+
+Assumptions: research ReAct ~3 turns, one ambiguous supervisor call, one analysis call, one writer call.
+
+| Agent | Calls | Input tokens | Output tokens |
+| --- | --- | --- | --- |
+| Research (ReAct) | 3 | ~6,000 | ~1,500 |
+| Supervisor LLM | 1 | ~800 | ~50 |
+| Analysis | 1 | ~2,500 | ~800 |
+| Writer | 1 | ~3,000 | ~600 |
+
+| Strategy | Models | Est. cost / run |
+| --- | --- | --- |
+| **Tiered (recommended)** | Supervisor: `gemini-2.5-pro`; workers: `gemini-2.5-flash` | ~$0.008–$0.012 |
+| **Single premium** | All `gemini-2.5-pro` | ~$0.025–$0.035 |
+| **Savings (tiered vs premium)** | — | **~60–70%** |
+
+Tiered breakdown (approximate): research flash ~$0.002, supervisor pro ~$0.003, analysis flash ~$0.001, writer flash ~$0.001 → **~$0.007 total**.
+
+### Verification commands
+
+```bash
+uv sync
+uv run pytest tests/unit -m unit -v
+uv run pytest tests/unit/test_graph_routing.py tests/unit/agents/test_supervisor_llm.py -v
+uv run pytest tests/integration/test_llm_pipeline.py -m integration -v  # requires GEMINI_API_KEY
+uv run ruff check src tests
+```
+
+```bash
+uv run ads-agent run "Should I use pgvector or Qdrant for my RAG system?"
+```
 
 ## License
 

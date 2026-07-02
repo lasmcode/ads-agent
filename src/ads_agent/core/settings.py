@@ -42,7 +42,15 @@ class AppSettings(BaseSettings):
     )
     research_model: str = Field(
         default="gemini/gemini-2.5-flash",
-        description="LiteLLM model identifier for the research ReAct agent",
+        description="LiteLLM model identifier for the research ReAct agent (worker tier)",
+    )
+    llm_supervisor_model: str = Field(
+        default="gemini/gemini-2.5-pro",
+        description="LiteLLM model for supervisor LLM routing on ambiguous states (reasoning tier)",
+    )
+    llm_worker_model: str = Field(
+        default="gemini/gemini-2.5-flash",
+        description="LiteLLM model for analysis and writer agents (cost-efficient tier)",
     )
     fetch_url_max_chars: int = Field(
         default=12_000,
