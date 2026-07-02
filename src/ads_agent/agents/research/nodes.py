@@ -26,6 +26,7 @@ from ads_agent.agents.common import safe_node
 from ads_agent.agents.research.prompts import RESEARCH_SYSTEM_PROMPT
 from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
 from ads_agent.core.settings import get_settings
+from ads_agent.infrastructure.llm.client import accumulate_token_cost
 from ads_agent.infrastructure.mcp.client import get_mcp_tools
 from ads_agent.infrastructure.vector_store.retriever import hybrid_search
 
@@ -237,6 +238,12 @@ async def research_node(state: AgentState) -> dict:
         receipt.add_agent_metrics(metrics)
         if agent_result.source_urls:
             receipt.add_consulted_sources(agent_result.source_urls)
+        accumulate_token_cost(
+            receipt,
+            get_settings().research_model,
+            agent_result.input_tokens,
+            agent_result.output_tokens,
+        )
 
     log.info(
         "research_node_completed",

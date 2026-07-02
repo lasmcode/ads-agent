@@ -20,7 +20,11 @@ from langgraph.checkpoint.memory import MemorySaver
 import pytest
 
 from ads_agent.agents.state import MAX_ITERATIONS, AgentState
-from ads_agent.agents.supervisor.nodes import should_continue, supervisor_node
+from ads_agent.agents.supervisor.nodes import (
+    deterministic_route,
+    should_continue,
+    supervisor_node,
+)
 from ads_agent.core.entities.decision_request import DecisionRequest
 from ads_agent.core.entities.execution_receipt import ExecutionReceipt
 
@@ -61,22 +65,19 @@ def base_state(sample_request: DecisionRequest) -> AgentState:
 class TestSupervisorRouting:
     def test_routes_to_research_when_no_data(self, base_state: AgentState) -> None:
         """First call must always go to research."""
-        result = supervisor_node(base_state)
-        assert result["next_agent"] == "research"
+        assert deterministic_route(base_state) == "research"
 
     def test_routes_to_analysis_after_research(self, base_state: AgentState) -> None:
         """With research done, supervisor must route to analysis."""
         base_state["research_output"] = "Research findings stub"
-        result = supervisor_node(base_state)
-        assert result["next_agent"] == "analysis"
+        assert deterministic_route(base_state) == "analysis"
 
     def test_routes_to_writer_after_analysis(self, base_state: AgentState) -> None:
         """With research + analysis done, supervisor must route to writer."""
 
         base_state["research_output"] = "Research findings stub"
         base_state["analysis_output"] = "Analysis output stub"
-        result = supervisor_node(base_state)
-        assert result["next_agent"] == "writer"
+        assert deterministic_route(base_state) == "writer"
 
     def test_routes_to_finish_after_report(self, base_state: AgentState) -> None:
         """With all outputs done, supervisor must route to FINISH."""
@@ -90,31 +91,32 @@ class TestSupervisorRouting:
             recommendation="Use pgvector.",
             summary="Summary.",
         )
-        result = supervisor_node(base_state)
-        assert result["next_agent"] == "FINISH"
+        assert deterministic_route(base_state) == "FINISH"
 
     def test_routes_to_finish_on_error(self, base_state: AgentState) -> None:
         """Any error must terminate the pipeline gracefully."""
         base_state["error"] = "Research agent failed: timeout"
-        result = supervisor_node(base_state)
-        assert result["next_agent"] == "FINISH"
+        assert deterministic_route(base_state) == "FINISH"
 
-    def test_increments_iteration_counter(self, base_state: AgentState) -> None:
+    @pytest.mark.asyncio
+    async def test_increments_iteration_counter(self, base_state: AgentState) -> None:
         """Each supervisor call must increment the iteration counter."""
-        result = supervisor_node(base_state)
+        result = await supervisor_node(base_state)
         assert result["iterations"] == 1
 
-    def test_circuit_breaker_at_max_iterations(self, base_state: AgentState) -> None:
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_at_max_iterations(self, base_state: AgentState) -> None:
         """Circuit breaker must trigger when iterations reach MAX_ITERATIONS."""
         base_state["iterations"] = MAX_ITERATIONS
-        result = supervisor_node(base_state)
+        result = await supervisor_node(base_state)
         assert result["next_agent"] == "FINISH"
         assert result["receipt"].circuit_breaker_triggered is True
 
-    def test_circuit_breaker_not_triggered_before_max(self, base_state: AgentState) -> None:
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_not_triggered_before_max(self, base_state: AgentState) -> None:
         """Circuit breaker must NOT trigger before MAX_ITERATIONS."""
         base_state["iterations"] = MAX_ITERATIONS - 1
-        result = supervisor_node(base_state)
+        result = await supervisor_node(base_state)
         assert result["receipt"].circuit_breaker_triggered is False
 
 

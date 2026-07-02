@@ -1,9 +1,6 @@
 # src/ads_agent/agents/analysis/nodes.py
 """
-Analysis Agent node — Phase 1 stub.
-
-In Phase 1: returns a hardcoded placeholder.
-In Phase 4: replaced with structured LLM reasoning using Pydantic output parsing.
+Analysis Agent node — structured LLM reasoning over research output.
 """
 
 from __future__ import annotations
@@ -14,8 +11,12 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import AIMessage
 import structlog
 
+from ads_agent.agents.analysis.prompts import ANALYSIS_SYSTEM_PROMPT, ANALYSIS_USER_TEMPLATE
 from ads_agent.agents.common import safe_node
 from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
+from ads_agent.core.settings import get_settings
+from ads_agent.infrastructure.llm.client import LLMCompletionResult, complete
+from ads_agent.infrastructure.llm.schemas import AnalysisOutput
 
 if TYPE_CHECKING:
     from ads_agent.agents.state import AgentState
@@ -23,26 +24,68 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-@safe_node("analysis")
-def analysis_node(state: AgentState) -> dict:
-    """
-    Analysis Agent: evaluates trade-offs from research output.
+def _format_trade_offs_summary(output: AnalysisOutput) -> str:
+    lines = [f"Trade-off analysis ({len(output.trade_offs)} dimensions):"]
+    for trade_off in output.trade_offs:
+        winner = f" → {trade_off.winner}" if trade_off.winner else ""
+        lines.append(
+            f"- {trade_off.dimension}: {trade_off.option_a} vs {trade_off.option_b}{winner}"
+        )
+    return "\n".join(lines)
 
-    Phase 1: returns a stub output.
-    """
+
+async def run_analysis_agent(
+    query: str,
+    research_output: str,
+    *,
+    receipt=None,
+) -> tuple[AnalysisOutput, LLMCompletionResult]:
+    """Run the analysis LLM and return structured trade-offs."""
+    settings = get_settings()
+    user_content = ANALYSIS_USER_TEMPLATE.format(
+        query=query,
+        research_output=research_output,
+    )
+    messages = [
+        {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+    result = await complete(
+        messages,
+        settings.llm_worker_model,
+        response_model=AnalysisOutput,
+        receipt=receipt,
+        agent_name="analysis",
+    )
+
+    if result.parsed is None or not isinstance(result.parsed, AnalysisOutput):
+        msg = "Analysis LLM did not return valid structured output"
+        raise ValueError(msg)
+
+    return result.parsed, result
+
+
+@safe_node("analysis")
+async def analysis_node(state: AgentState) -> dict:
+    """Analysis Agent: evaluates trade-offs from research output."""
     log.info("analysis_node_started", request_id=state["request"].id)
 
     started_at = datetime.now(UTC)
+    research_output = state.get("research_output")
+    if not research_output:
+        msg = "analysis_node requires research_output"
+        raise ValueError(msg)
 
-    analysis_output = (
-        f"[STUB] Trade-off analysis for: '{state['request'].query}'\n\n"
-        "This is a placeholder. In Phase 4, this node will:\n"
-        "  1. Parse research findings\n"
-        "  2. Identify key decision dimensions\n"
-        "  3. Score each option per dimension\n"
-        "  4. Return a structured TradeOff list via Pydantic parsing"
+    receipt = state.get("receipt")
+    analysis, llm_result = await run_analysis_agent(
+        state["request"].query,
+        research_output,
+        receipt=receipt,
     )
 
+    analysis_output = analysis.model_dump_json()
+    summary_message = _format_trade_offs_summary(analysis)
     completed_at = datetime.now(UTC)
 
     metrics = AgentMetrics(
@@ -50,16 +93,22 @@ def analysis_node(state: AgentState) -> dict:
         status=AgentStatus.COMPLETED,
         started_at=started_at,
         completed_at=completed_at,
+        input_tokens=llm_result.input_tokens,
+        output_tokens=llm_result.output_tokens,
     )
 
-    receipt = state.get("receipt")
     if receipt:
         receipt.add_agent_metrics(metrics)
 
-    log.info("analysis_node_completed", duration_s=metrics.duration_seconds)
+    log.info(
+        "analysis_node_completed",
+        duration_s=metrics.duration_seconds,
+        trade_offs=len(analysis.trade_offs),
+        tokens=metrics.total_tokens,
+    )
 
     return {
         "analysis_output": analysis_output,
-        "messages": [AIMessage(content=analysis_output, name="analysis")],
+        "messages": [AIMessage(content=summary_message, name="analysis")],
         "receipt": receipt,
     }
