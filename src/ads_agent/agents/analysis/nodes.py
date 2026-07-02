@@ -17,6 +17,11 @@ from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
 from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.llm.client import LLMCompletionResult, complete
 from ads_agent.infrastructure.llm.schemas import AnalysisOutput
+from ads_agent.infrastructure.observability.tracer import (
+    agent_span,
+    llm_generation,
+    update_generation,
+)
 
 if TYPE_CHECKING:
     from ads_agent.agents.state import AgentState
@@ -51,13 +56,27 @@ async def run_analysis_agent(
         {"role": "user", "content": user_content},
     ]
 
-    result = await complete(
-        messages,
-        settings.llm_worker_model,
-        response_model=AnalysisOutput,
-        receipt=receipt,
-        agent_name="analysis",
-    )
+    model = settings.llm_worker_model
+    with llm_generation("analysis-llm", model, messages) as generation:
+        result = await complete(
+            messages,
+            model,
+            response_model=AnalysisOutput,
+            receipt=receipt,
+            agent_name="analysis",
+        )
+        output = (
+            result.parsed.model_dump()
+            if isinstance(result.parsed, AnalysisOutput)
+            else result.raw_content
+        )
+        update_generation(
+            generation,
+            output=output,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            model=model,
+        )
 
     if result.parsed is None or not isinstance(result.parsed, AnalysisOutput):
         msg = "Analysis LLM did not return valid structured output"
@@ -69,46 +88,47 @@ async def run_analysis_agent(
 @safe_node("analysis")
 async def analysis_node(state: AgentState) -> dict:
     """Analysis Agent: evaluates trade-offs from research output."""
-    log.info("analysis_node_started", request_id=state["request"].id)
+    with agent_span("analysis"):
+        log.info("analysis_node_started", request_id=state["request"].id)
 
-    started_at = datetime.now(UTC)
-    research_output = state.get("research_output")
-    if not research_output:
-        msg = "analysis_node requires research_output"
-        raise ValueError(msg)
+        started_at = datetime.now(UTC)
+        research_output = state.get("research_output")
+        if not research_output:
+            msg = "analysis_node requires research_output"
+            raise ValueError(msg)
 
-    receipt = state.get("receipt")
-    analysis, llm_result = await run_analysis_agent(
-        state["request"].query,
-        research_output,
-        receipt=receipt,
-    )
+        receipt = state.get("receipt")
+        analysis, llm_result = await run_analysis_agent(
+            state["request"].query,
+            research_output,
+            receipt=receipt,
+        )
 
-    analysis_output = analysis.model_dump_json()
-    summary_message = _format_trade_offs_summary(analysis)
-    completed_at = datetime.now(UTC)
+        analysis_output = analysis.model_dump_json()
+        summary_message = _format_trade_offs_summary(analysis)
+        completed_at = datetime.now(UTC)
 
-    metrics = AgentMetrics(
-        agent_name="analysis",
-        status=AgentStatus.COMPLETED,
-        started_at=started_at,
-        completed_at=completed_at,
-        input_tokens=llm_result.input_tokens,
-        output_tokens=llm_result.output_tokens,
-    )
+        metrics = AgentMetrics(
+            agent_name="analysis",
+            status=AgentStatus.COMPLETED,
+            started_at=started_at,
+            completed_at=completed_at,
+            input_tokens=llm_result.input_tokens,
+            output_tokens=llm_result.output_tokens,
+        )
 
-    if receipt:
-        receipt.add_agent_metrics(metrics)
+        if receipt:
+            receipt.add_agent_metrics(metrics)
 
-    log.info(
-        "analysis_node_completed",
-        duration_s=metrics.duration_seconds,
-        trade_offs=len(analysis.trade_offs),
-        tokens=metrics.total_tokens,
-    )
+        log.info(
+            "analysis_node_completed",
+            duration_s=metrics.duration_seconds,
+            trade_offs=len(analysis.trade_offs),
+            tokens=metrics.total_tokens,
+        )
 
-    return {
-        "analysis_output": analysis_output,
-        "messages": [AIMessage(content=summary_message, name="analysis")],
-        "receipt": receipt,
-    }
+        return {
+            "analysis_output": analysis_output,
+            "messages": [AIMessage(content=summary_message, name="analysis")],
+            "receipt": receipt,
+        }

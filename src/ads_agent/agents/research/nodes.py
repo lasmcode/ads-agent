@@ -28,6 +28,11 @@ from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
 from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.llm.client import accumulate_token_cost
 from ads_agent.infrastructure.mcp.client import get_mcp_tools
+from ads_agent.infrastructure.observability.tracer import (
+    agent_span,
+    llm_generation,
+    update_generation,
+)
 from ads_agent.infrastructure.vector_store.retriever import hybrid_search
 
 if TYPE_CHECKING:
@@ -175,25 +180,36 @@ async def run_research_agent(
     rag_context, rag_source_urls = await _retrieve_rag_context(query)
     augmented_query = f"{rag_context}\n\n---\n\n{query}" if rag_context else query
 
-    model = ChatLiteLLM(model=settings.research_model, temperature=0)
+    model_name = settings.research_model
+    model = ChatLiteLLM(model=model_name, temperature=0)
     agent = create_agent(model, mcp_tools, system_prompt=RESEARCH_SYSTEM_PROMPT)
 
-    result: dict[str, Any] = await agent.ainvoke(
-        {"messages": [HumanMessage(content=augmented_query)]},
-    )
+    input_messages = [{"role": "user", "content": augmented_query}]
+    with llm_generation("research-react", model_name, input_messages) as generation:
+        result: dict[str, Any] = await agent.ainvoke(
+            {"messages": [HumanMessage(content=augmented_query)]},
+        )
 
-    messages: list[BaseMessage] = result.get("messages") or []
-    if not messages:
-        msg = "Research agent returned no messages"
-        raise RuntimeError(msg)
+        messages: list[BaseMessage] = result.get("messages") or []
+        if not messages:
+            msg = "Research agent returned no messages"
+            raise RuntimeError(msg)
 
-    final_message = messages[-1]
-    if isinstance(final_message.content, str):
-        output = final_message.content
-    else:
-        output = str(final_message.content)
+        final_message = messages[-1]
+        if isinstance(final_message.content, str):
+            output = final_message.content
+        else:
+            output = str(final_message.content)
 
-    input_tokens, output_tokens = _extract_token_usage(messages)
+        input_tokens, output_tokens = _extract_token_usage(messages)
+        update_generation(
+            generation,
+            output=output,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model_name,
+        )
+
     source_urls = _extract_urls_from_messages(messages)
     for url in rag_source_urls:
         if url not in source_urls:
@@ -214,47 +230,48 @@ async def research_node(state: AgentState) -> dict:
 
     Phase 2: ReAct agent with MCP tools (web search, docs, URL fetch).
     """
-    log.info("research_node_started", request_id=state["request"].id)
+    with agent_span("research"):
+        log.info("research_node_started", request_id=state["request"].id)
 
-    started_at = datetime.now(UTC)
-    query = state["request"].query
+        started_at = datetime.now(UTC)
+        query = state["request"].query
 
-    agent_result = await run_research_agent(query)
-    research_output = agent_result.output
+        agent_result = await run_research_agent(query)
+        research_output = agent_result.output
 
-    completed_at = datetime.now(UTC)
+        completed_at = datetime.now(UTC)
 
-    metrics = AgentMetrics(
-        agent_name="research",
-        status=AgentStatus.COMPLETED,
-        started_at=started_at,
-        completed_at=completed_at,
-        input_tokens=agent_result.input_tokens,
-        output_tokens=agent_result.output_tokens,
-    )
-
-    receipt = state.get("receipt")
-    if receipt:
-        receipt.add_agent_metrics(metrics)
-        if agent_result.source_urls:
-            receipt.add_consulted_sources(agent_result.source_urls)
-        accumulate_token_cost(
-            receipt,
-            get_settings().research_model,
-            agent_result.input_tokens,
-            agent_result.output_tokens,
+        metrics = AgentMetrics(
+            agent_name="research",
+            status=AgentStatus.COMPLETED,
+            started_at=started_at,
+            completed_at=completed_at,
+            input_tokens=agent_result.input_tokens,
+            output_tokens=agent_result.output_tokens,
         )
 
-    log.info(
-        "research_node_completed",
-        duration_s=metrics.duration_seconds,
-        input_tokens=metrics.input_tokens,
-        output_tokens=metrics.output_tokens,
-        sources=len(agent_result.source_urls),
-    )
+        receipt = state.get("receipt")
+        if receipt:
+            receipt.add_agent_metrics(metrics)
+            if agent_result.source_urls:
+                receipt.add_consulted_sources(agent_result.source_urls)
+            accumulate_token_cost(
+                receipt,
+                get_settings().research_model,
+                agent_result.input_tokens,
+                agent_result.output_tokens,
+            )
 
-    return {
-        "research_output": research_output,
-        "messages": [AIMessage(content=research_output, name="research")],
-        "receipt": receipt,
-    }
+        log.info(
+            "research_node_completed",
+            duration_s=metrics.duration_seconds,
+            input_tokens=metrics.input_tokens,
+            output_tokens=metrics.output_tokens,
+            sources=len(agent_result.source_urls),
+        )
+
+        return {
+            "research_output": research_output,
+            "messages": [AIMessage(content=research_output, name="research")],
+            "receipt": receipt,
+        }

@@ -180,6 +180,9 @@ async def test_full_pipeline_executes_with_stubs(
     # Circuit breaker must NOT have triggered for a normal run
     assert receipt.circuit_breaker_triggered is False
 
+    # Langfuse not configured in CI — trace_id stays None
+    assert receipt.trace_id is None
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

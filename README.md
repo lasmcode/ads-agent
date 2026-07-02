@@ -74,8 +74,9 @@ cp .env.example .env
 ```bash
 make docker-up
 # PostgreSQL → localhost:5432
-# Langfuse   → http://localhost:3000
 ```
+
+Langfuse observability uses **Langfuse Cloud** by default. Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST=https://cloud.langfuse.com` in `.env` (see `.env.example`).
 
 ### 4. Run tests
 
@@ -109,6 +110,9 @@ Optional environment variables:
 | `ADS_DATABASE_URL`        | `postgresql://adsagent:adsagent@localhost:5432/adsagent` | App connection string (must match Postgres) |
 | `ADS_MAX_ITERATIONS`      | `5`                                                  | Circuit breaker limit for supervisor loops |
 | `ADS_LOG_LEVEL`           | `INFO`                                               | Logging level                              |
+| `LANGFUSE_PUBLIC_KEY`     | —                                                    | Langfuse Cloud public key (optional)       |
+| `LANGFUSE_SECRET_KEY`     | —                                                    | Langfuse Cloud secret key (optional)       |
+| `LANGFUSE_HOST`           | `https://cloud.langfuse.com`                         | Langfuse API host                          |
 
 ## Development Commands
 
@@ -143,14 +147,22 @@ ads-agent/
 
 ## Observability
 
-Every agent execution is fully traced in Langfuse:
+Every agent execution produces a Langfuse trace when credentials are configured:
 
-- Trace per query with nested spans per agent
-- Token consumption and cost per span
-- Execution time per agent
-- Quality scores (faithfulness, relevance)
+- Root trace `ads-agent-pipeline` per run, linked via `ExecutionReceipt.trace_id`
+- Nested spans per graph node (`supervisor`, `research`, `analysis`, `writer`)
+- LLM generations with model, input/output, and token usage
+- Post-execution scores: `has_sources`, `trade_offs_count`
 
-Access the Langfuse UI at `http://localhost:3000` after `make docker-up`.
+Configure Langfuse Cloud in `.env` and open traces at [cloud.langfuse.com](https://cloud.langfuse.com). The CLI prints the trace ID when tracing is active.
+
+### Visual verification
+
+1. Run: `uv run ads-agent run "Should I use Redis or Memcached for session storage?"`
+2. Copy the **Trace ID** from the execution receipt output
+3. In Langfuse → **Tracing**, search by trace ID
+4. Confirm hierarchy: `ads-agent-pipeline` → repeated `supervisor` spans → `research`/`analysis`/`writer` each with a nested generation
+5. Check **Scores** tab for `has_sources` and `trade_offs_count`
 
 ## Roadmap
 
@@ -159,7 +171,7 @@ Access the Langfuse UI at `http://localhost:3000` after `make docker-up`.
 - [x] Phase 2 — MCP Tool Layer
 - [x] Phase 3 — RAG Pipeline with pgvector
 - [x] Phase 4 — Full Multi-Agent System (LiteLLM tiered models)
-- [ ] Phase 5 — Langfuse Observability
+- [x] Phase 5 — Langfuse Observability
 - [ ] Phase 6 — Evaluation Engine
 - [ ] Phase 7 — FastAPI Gateway
 - [ ] Phase 8 — Docker + CI/CD deployment

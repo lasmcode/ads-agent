@@ -18,6 +18,11 @@ from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
 from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.llm.client import LLMCompletionResult, complete
 from ads_agent.infrastructure.llm.schemas import AnalysisOutput, WriterDraft
+from ads_agent.infrastructure.observability.tracer import (
+    agent_span,
+    llm_generation,
+    update_generation,
+)
 
 if TYPE_CHECKING:
     from ads_agent.agents.state import AgentState
@@ -44,13 +49,27 @@ async def run_writer_agent(
         {"role": "user", "content": user_content},
     ]
 
-    result = await complete(
-        messages,
-        settings.llm_worker_model,
-        response_model=WriterDraft,
-        receipt=receipt,
-        agent_name="writer",
-    )
+    model = settings.llm_worker_model
+    with llm_generation("writer-llm", model, messages) as generation:
+        result = await complete(
+            messages,
+            model,
+            response_model=WriterDraft,
+            receipt=receipt,
+            agent_name="writer",
+        )
+        output = (
+            result.parsed.model_dump()
+            if isinstance(result.parsed, WriterDraft)
+            else result.raw_content
+        )
+        update_generation(
+            generation,
+            output=output,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            model=model,
+        )
 
     if result.parsed is None or not isinstance(result.parsed, WriterDraft):
         msg = "Writer LLM did not return valid structured output"
@@ -62,66 +81,67 @@ async def run_writer_agent(
 @safe_node("writer")
 async def writer_node(state: AgentState) -> dict:
     """Writer Agent: produces the final structured Decision Report."""
-    log.info("writer_node_started", request_id=state["request"].id)
+    with agent_span("writer"):
+        log.info("writer_node_started", request_id=state["request"].id)
 
-    started_at = datetime.now(UTC)
-    research_output = state.get("research_output")
-    analysis_raw = state.get("analysis_output")
+        started_at = datetime.now(UTC)
+        research_output = state.get("research_output")
+        analysis_raw = state.get("analysis_output")
 
-    if not research_output:
-        msg = "writer_node requires research_output"
-        raise ValueError(msg)
-    if not analysis_raw:
-        msg = "writer_node requires analysis_output"
-        raise ValueError(msg)
+        if not research_output:
+            msg = "writer_node requires research_output"
+            raise ValueError(msg)
+        if not analysis_raw:
+            msg = "writer_node requires analysis_output"
+            raise ValueError(msg)
 
-    analysis = AnalysisOutput.model_validate_json(analysis_raw)
-    receipt = state.get("receipt")
+        analysis = AnalysisOutput.model_validate_json(analysis_raw)
+        receipt = state.get("receipt")
 
-    draft, llm_result = await run_writer_agent(
-        state["request"].query,
-        research_output,
-        analysis,
-        receipt=receipt,
-    )
+        draft, llm_result = await run_writer_agent(
+            state["request"].query,
+            research_output,
+            analysis,
+            receipt=receipt,
+        )
 
-    sources = list(receipt.source_urls) if receipt else []
+        sources = list(receipt.source_urls) if receipt else []
 
-    report = DecisionReport(
-        request_id=state["request"].id,
-        query=state["request"].query,
-        recommendation=draft.recommendation,
-        recommendation_strength=draft.recommendation_strength,
-        summary=draft.summary,
-        trade_offs=analysis.trade_offs,
-        key_considerations=draft.key_considerations,
-        when_to_choose_alternative=draft.when_to_choose_alternative,
-        sources=sources,
-    )
+        report = DecisionReport(
+            request_id=state["request"].id,
+            query=state["request"].query,
+            recommendation=draft.recommendation,
+            recommendation_strength=draft.recommendation_strength,
+            summary=draft.summary,
+            trade_offs=analysis.trade_offs,
+            key_considerations=draft.key_considerations,
+            when_to_choose_alternative=draft.when_to_choose_alternative,
+            sources=sources,
+        )
 
-    completed_at = datetime.now(UTC)
+        completed_at = datetime.now(UTC)
 
-    metrics = AgentMetrics(
-        agent_name="writer",
-        status=AgentStatus.COMPLETED,
-        started_at=started_at,
-        completed_at=completed_at,
-        input_tokens=llm_result.input_tokens,
-        output_tokens=llm_result.output_tokens,
-    )
+        metrics = AgentMetrics(
+            agent_name="writer",
+            status=AgentStatus.COMPLETED,
+            started_at=started_at,
+            completed_at=completed_at,
+            input_tokens=llm_result.input_tokens,
+            output_tokens=llm_result.output_tokens,
+        )
 
-    if receipt:
-        receipt.add_agent_metrics(metrics)
+        if receipt:
+            receipt.add_agent_metrics(metrics)
 
-    log.info(
-        "writer_node_completed",
-        duration_s=metrics.duration_seconds,
-        sources=len(sources),
-        tokens=metrics.total_tokens,
-    )
+        log.info(
+            "writer_node_completed",
+            duration_s=metrics.duration_seconds,
+            sources=len(sources),
+            tokens=metrics.total_tokens,
+        )
 
-    return {
-        "final_report": report,
-        "messages": [AIMessage(content=report.recommendation, name="writer")],
-        "receipt": receipt,
-    }
+        return {
+            "final_report": report,
+            "messages": [AIMessage(content=report.recommendation, name="writer")],
+            "receipt": receipt,
+        }

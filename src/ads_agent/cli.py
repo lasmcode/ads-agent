@@ -84,6 +84,8 @@ def _format_text_output(
             f"Circuit break: {summary['circuit_breaker_triggered']}",
         ]
     )
+    if summary.get("trace_id"):
+        lines.append(f"Trace ID:      {summary['trace_id']}")
     return "\n".join(lines)
 
 
