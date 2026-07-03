@@ -107,7 +107,9 @@ class ExecutionReceipt(BaseModel):
         return self.total_input_tokens + self.total_output_tokens
 
     def mark_completed(self) -> None:
-        """Seal the receipt with a completion timestamp."""
+        """Seal the receipt with a completion timestamp (idempotent)."""
+        if self.completed_at is not None:
+            return
         self.completed_at = datetime.now(UTC)
 
     def add_agent_metrics(self, metrics: AgentMetrics) -> None:

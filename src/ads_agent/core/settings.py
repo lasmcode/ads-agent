@@ -6,10 +6,11 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 McpTransport = Literal["stdio", "streamable-http"]
+AppEnv = Literal["development", "production", "test"]
 
 
 class AppSettings(BaseSettings):
@@ -176,6 +177,44 @@ class AppSettings(BaseSettings):
         validation_alias="EVAL_CONTEXT_PRECISION_THRESHOLD",
         description="Production alert threshold for context precision metric",
     )
+
+    # --- FastAPI Gateway (Phase 7) ---
+    app_env: AppEnv = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ADS_APP_ENV"),
+        description="Runtime environment — controls error detail exposure in API responses",
+    )
+    api_host: str = Field(
+        default="0.0.0.0",
+        description="Host address for the FastAPI server",
+    )
+    api_port: int = Field(
+        default=8080,
+        ge=1,
+        le=65535,
+        description="Port for the FastAPI server",
+    )
+    api_pipeline_timeout: float = Field(
+        default=120.0,
+        gt=0,
+        description="Maximum seconds to wait for a pipeline run before returning HTTP 504",
+    )
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        description="Allowed CORS origins (comma-separated in ADS_CORS_ORIGINS env var)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        validation_alias="LANGFUSE_HOST",
+        description="Langfuse base URL for trace links in API receipts",
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     model_config = SettingsConfigDict(
         env_prefix="ADS_",

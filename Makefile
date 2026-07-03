@@ -6,7 +6,7 @@
 .PHONY: help install dev lint lint-fix format format-check check test \
         test-unit test-integration test-eval test-cov test-watch docker-up \
         docker-down docker-reset docker-logs docker-logs-pg \
-        docker-logs-langfuse clean
+        docker-logs-langfuse api-dev api-run clean
 
 # Default target: show help
 .DEFAULT_GOAL := help
@@ -106,6 +106,16 @@ docker-logs-pg: ## Follow PostgreSQL logs only
 
 docker-logs-langfuse: ## (Reserved) Langfuse is Cloud-hosted; use cloud.langfuse.com
 	@echo "Langfuse runs on Cloud — set LANGFUSE_HOST=https://cloud.langfuse.com in .env"
+
+# -----------------------------------------------------------------------------
+# API (Phase 7)
+# -----------------------------------------------------------------------------
+
+api-dev: ## Start FastAPI server with auto-reload (development)
+	uv run ads-agent-api
+
+api-run: ## Start FastAPI server in production mode (no reload)
+	APP_ENV=production uv run uvicorn ads_agent.api.main:app --host 0.0.0.0 --port 8080
 
 # -----------------------------------------------------------------------------
 # Utilities
