@@ -28,6 +28,7 @@ def research_state() -> AgentState:
         messages=[HumanMessage(content=request.query)],
         next_agent="",
         research_output=None,
+        retrieved_contexts=[],
         analysis_output=None,
         final_report=None,
         receipt=ExecutionReceipt(request_id=request.id),
@@ -74,6 +75,7 @@ class TestResearchNode:
                 input_tokens=42,
                 output_tokens=21,
                 source_urls=["https://docs.example.com/rag"],
+                retrieved_contexts=["chunk content about pgvector"],
             )
 
         monkeypatch.setattr(

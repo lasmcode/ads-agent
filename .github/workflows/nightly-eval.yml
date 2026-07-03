@@ -1,0 +1,92 @@
+# =============================================================================
+# ADS Agent — Nightly Evaluation (informative, does not block PRs)
+# =============================================================================
+
+name: Nightly Evaluation
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.14"
+  UV_VERSION: "latest"
+
+jobs:
+  nightly-evaluation:
+    name: Golden Dataset Quality Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: adsagent
+          POSTGRES_USER: adsagent
+          POSTGRES_PASSWORD: adsagent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U adsagent -d adsagent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install Project Dependencies
+        run: uv sync --all-extras
+
+      - name: Run Quality Gate Tests
+        id: quality_gate
+        run: |
+          uv run pytest tests/integration/test_quality_gate.py \
+            -m "integration and evaluation" -v --tb=short 2>&1 | tee eval_output.txt
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          ADS_DATABASE_URL: postgresql://adsagent:adsagent@localhost:5432/adsagent
+          EVAL_QUALITY_THRESHOLD: "0.75"
+          APP_ENV: test
+          APP_LOG_LEVEL: WARNING
+
+      - name: Publish job summary
+        if: always()
+        run: |
+          {
+            echo "## Nightly Evaluation Results"
+            echo ""
+            echo "**Workflow:** ${{ github.workflow }}"
+            echo "**Run:** ${{ github.run_number }}"
+            echo "**Threshold:** \`EVAL_QUALITY_THRESHOLD=0.75\`"
+            echo ""
+            if [ "${{ steps.quality_gate.outcome }}" = "success" ]; then
+              echo "✅ Quality gate **PASSED**"
+            else
+              echo "❌ Quality gate **FAILED** — review RAGAS scores and golden dataset regressions"
+            fi
+            echo ""
+            echo "### Test output (last 80 lines)"
+            echo '```'
+            tail -n 80 eval_output.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

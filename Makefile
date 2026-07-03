@@ -4,7 +4,7 @@
 # =============================================================================
 
 .PHONY: help install dev lint lint-fix format format-check check test \
-        test-unit test-integration test-cov test-watch docker-up \
+        test-unit test-integration test-eval test-cov test-watch docker-up \
         docker-down docker-reset docker-logs docker-logs-pg \
         docker-logs-langfuse clean
 
@@ -67,6 +67,9 @@ test-unit: ## Run only unit tests (no external services required)
 
 test-integration: ## Run only integration tests (requires Docker services)
 	uv run pytest -m integration -v
+
+test-eval: ## Run golden dataset quality gate (requires GEMINI_API_KEY)
+	uv run pytest tests/integration/test_quality_gate.py -m "integration and evaluation" -v
 
 test-cov: ## Run all tests with coverage report on the src package
 	uv run pytest --cov=src/ads_agent --cov-report=term-missing --cov-report=html --no-cov-on-fail

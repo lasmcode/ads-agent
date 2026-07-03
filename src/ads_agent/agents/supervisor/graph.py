@@ -41,7 +41,9 @@ from ads_agent.agents.research.nodes import research_node
 from ads_agent.agents.state import AgentState
 from ads_agent.agents.supervisor.nodes import should_continue, supervisor_node
 from ads_agent.agents.writer.nodes import writer_node
+from ads_agent.application.services.evaluation_runner import schedule_evaluation
 from ads_agent.core.entities.execution_receipt import ExecutionReceipt
+from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.observability.tracer import (
     capture_trace_id,
     compute_pipeline_scores,
@@ -138,6 +140,7 @@ async def run_pipeline(
         "messages": [HumanMessage(content=request.query)],
         "next_agent": "",
         "research_output": None,
+        "retrieved_contexts": [],
         "analysis_output": None,
         "final_report": None,
         "receipt": receipt,
@@ -179,6 +182,8 @@ async def run_pipeline(
                 has_sources=has_sources,
                 trade_offs_count=trade_offs_count,
             )
+            if final_state.get("final_report") and get_settings().eval_enabled:
+                schedule_evaluation(final_state, receipt.trace_id)
 
     flush_traces()
     receipt.mark_completed()

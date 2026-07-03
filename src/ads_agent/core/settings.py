@@ -128,11 +128,61 @@ class AppSettings(BaseSettings):
         description="Token overlap between consecutive chunks, preserves cross-boundary context",
     )
 
+    # --- Evaluation Engine (Phase 6) ---
+    eval_enabled: bool = Field(
+        default=True,
+        description="Enable fire-and-forget RAGAS evaluation after pipeline completion",
+    )
+    eval_sample_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of pipeline runs to evaluate (1.0 in dev; 0.05-0.15 in production)",
+    )
+    eval_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description="Maximum seconds to wait for a single RAGAS evaluation",
+    )
+    eval_model: str = Field(
+        default="gemini/gemini-2.5-flash",
+        description="LiteLLM model identifier for RAGAS metric scoring",
+    )
+    eval_quality_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EVAL_QUALITY_THRESHOLD",
+        description="Minimum batch average quality_score for quality gate tests",
+    )
+    eval_faithfulness_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EVAL_FAITHFULNESS_THRESHOLD",
+        description="Production alert threshold for faithfulness metric",
+    )
+    eval_answer_relevancy_threshold: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EVAL_ANSWER_RELEVANCY_THRESHOLD",
+        description="Production alert threshold for answer relevancy metric",
+    )
+    eval_context_precision_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EVAL_CONTEXT_PRECISION_THRESHOLD",
+        description="Production alert threshold for context precision metric",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="ADS_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
 

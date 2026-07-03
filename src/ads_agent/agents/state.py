@@ -53,6 +53,7 @@ class AgentState(TypedDict):
 
     # --- Pipeline data (each agent populates its section) ---
     research_output: str | None  # Raw research findings
+    retrieved_contexts: list[str]  # Raw RAG chunk contents from hybrid_search (Phase 6)
     analysis_output: str | None  # Structured trade-off analysis
     final_report: DecisionReport | None  # Completed report from writer
 

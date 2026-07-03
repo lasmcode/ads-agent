@@ -39,6 +39,7 @@ def writer_state() -> AgentState:
         messages=[HumanMessage(content=request.query)],
         next_agent="",
         research_output="Research " * 50,
+        retrieved_contexts=[],
         analysis_output=analysis.model_dump_json(),
         final_report=None,
         receipt=receipt,
