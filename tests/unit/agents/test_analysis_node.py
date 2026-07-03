@@ -25,6 +25,7 @@ def analysis_state() -> AgentState:
         messages=[HumanMessage(content=request.query)],
         next_agent="",
         research_output="Research " * 50,
+        retrieved_contexts=[],
         analysis_output=None,
         final_report=None,
         receipt=ExecutionReceipt(request_id=request.id),

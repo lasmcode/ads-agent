@@ -53,6 +53,31 @@ def test_submit_scores_calls_create_score(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
+def test_submit_evaluation_scores_calls_create_score(monkeypatch: pytest.MonkeyPatch) -> None:
+    """submit_evaluation_scores sends RAGAS metrics to Langfuse."""
+    mock_client = MagicMock()
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-real-key")
+    monkeypatch.setattr(tracer, "get_langfuse_client", lambda: mock_client)
+
+    tracer.submit_evaluation_scores(
+        "trace-eval",
+        faithfulness=0.92,
+        answer_relevancy=0.88,
+        context_precision=0.76,
+        quality_score=0.86,
+    )
+
+    assert mock_client.create_score.call_count == 4
+    score_names = {call.kwargs["name"] for call in mock_client.create_score.call_args_list}
+    assert score_names == {
+        "faithfulness",
+        "answer_relevancy",
+        "context_precision",
+        "quality_score",
+    }
+
+
+@pytest.mark.unit
 def test_submit_scores_noop_without_trace_id() -> None:
     """Scores are skipped when trace_id is missing."""
     mock_client = MagicMock()

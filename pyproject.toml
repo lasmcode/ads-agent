@@ -12,9 +12,11 @@ dependencies = [
     "fastmcp>=3.3.1",
     "httpx>=0.28.1",
     "langchain>=1.3.2",
+    "langchain-community>=0.3.0,<0.4.2",
     "langchain-core>=1.4.0",
     "langchain-litellm>=0.3.0",
     "langchain-mcp-adapters>=0.1.0",
+    "langchain-openai>=0.2.0",
     "langfuse>=4.7.1",
     "langgraph>=1.2.2",
     "langgraph-checkpoint-postgres>=2.0.0",
@@ -27,7 +29,9 @@ dependencies = [
     "psycopg-pool>=3.2.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
+    "datasets>=3.0.0",
     "python-dotenv>=1.2.2",
+    "ragas>=0.3,<0.4",
     "structlog>=25.5.0",
     "tenacity>=9.0.0",
     "trafilatura>=2.0.0",
@@ -40,6 +44,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "deepeval>=2.0.0",
     "factory-boy>=3.3.3",
     "faker>=40.19.1",
     "mypy>=2.1.0",
@@ -109,6 +114,7 @@ markers = [
     "integration: Tests that require external services (DB, LLM APIs)",
     "e2e: End-to-end tests for full workflow validation",
     "slow: Tests that take more than 5 seconds",
+    "evaluation: Golden dataset / quality gate tests (API keys required)",
 ]
 
 [tool.coverage.run]

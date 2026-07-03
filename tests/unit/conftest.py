@@ -16,6 +16,7 @@ import pytest
 
 from ads_agent.agents.research.nodes import ResearchAgentResult
 from ads_agent.core.entities.decision_report import RecommendationStrength, TradeOff
+from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.llm.client import LLMCompletionResult
 from ads_agent.infrastructure.llm.schemas import AnalysisOutput, SupervisorDecision, WriterDraft
 
@@ -79,6 +80,13 @@ async def _mock_complete(messages, model, *, response_model=None, receipt=None, 
 
 
 @pytest.fixture(autouse=True)
+def disable_eval_for_unit_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests fast and offline — evaluation is tested in dedicated modules."""
+    monkeypatch.setenv("ADS_EVAL_ENABLED", "false")
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def disable_langfuse_for_unit_tests(
     monkeypatch: pytest.MonkeyPatch,
     request: pytest.FixtureRequest,
@@ -121,6 +129,7 @@ def mock_research_agent(monkeypatch: pytest.MonkeyPatch) -> None:
                 "https://example.com/pgvector-overview",
                 "https://example.com/qdrant-comparison",
             ],
+            retrieved_contexts=[],
         )
 
     monkeypatch.setattr(

@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "id": "pgvector-vs-qdrant",
+      "query": "Should I use pgvector or Qdrant for my RAG system?",
+      "expected_recommendation_direction": "pgvector if already on PostgreSQL; Qdrant for dedicated vector search at scale",
+      "expected_key_considerations": ["postgresql", "operational", "latency", "scale", "embedding"]
+    },
+    {
+      "id": "langgraph-vs-pydanticai",
+      "query": "LangGraph or PydanticAI for our new agent system?",
+      "expected_recommendation_direction": "LangGraph for complex multi-agent orchestration; PydanticAI for typed single-agent workflows",
+      "expected_key_considerations": ["orchestration", "typed", "graph", "checkpoint", "tool"]
+    },
+    {
+      "id": "jenkins-vs-github-actions",
+      "query": "Should we migrate from Jenkins to GitHub Actions?",
+      "expected_recommendation_direction": "GitHub Actions when repo is on GitHub and pipelines are moderate; Jenkins for heavy customization or hybrid infra",
+      "expected_key_considerations": ["ci", "maintenance", "integration", "runner", "cost"]
+    },
+    {
+      "id": "redis-vs-valkey",
+      "query": "Redis or Valkey — what are the real trade-offs in 2026?",
+      "expected_recommendation_direction": "Valkey as open-source Redis fork for licensing clarity; Redis for managed ecosystem and enterprise support",
+      "expected_key_considerations": ["license", "compatibility", "managed", "performance", "fork"]
+    },
+    {
+      "id": "monolith-vs-microservices",
+      "query": "When should we split our monolith into microservices?",
+      "expected_recommendation_direction": "Keep monolith until team or deployment boundaries justify extraction; microservices for independent scaling teams",
+      "expected_key_considerations": ["team", "deployment", "complexity", "latency", "boundary"]
+    },
+    {
+      "id": "rest-vs-graphql",
+      "query": "REST or GraphQL for our public API?",
+      "expected_recommendation_direction": "REST for simple resource APIs and caching; GraphQL when clients need flexible field selection",
+      "expected_key_considerations": ["caching", "client", "schema", "complexity", "over-fetching"]
+    },
+    {
+      "id": "kafka-vs-rabbitmq",
+      "query": "Kafka vs RabbitMQ for our event-driven architecture?",
+      "expected_recommendation_direction": "Kafka for high-throughput event streaming and replay; RabbitMQ for task queues and routing flexibility",
+      "expected_key_considerations": ["throughput", "replay", "routing", "operational", "ordering"]
+    },
+    {
+      "id": "terraform-vs-pulumi",
+      "query": "Terraform or Pulumi for infrastructure as code?",
+      "expected_recommendation_direction": "Terraform for ecosystem maturity and HCL standardization; Pulumi for typed IaC in existing languages",
+      "expected_key_considerations": ["ecosystem", "language", "state", "team", "provider"]
+    },
+    {
+      "id": "swarm-vs-kubernetes",
+      "query": "Docker Swarm or Kubernetes for container orchestration?",
+      "expected_recommendation_direction": "Kubernetes for production scale and ecosystem; Swarm only for minimal ops on small clusters",
+      "expected_key_considerations": ["scale", "ecosystem", "operational", "complexity", "scheduler"]
+    },
+    {
+      "id": "sqlite-vs-postgres-edge",
+      "query": "SQLite or PostgreSQL for edge deployments?",
+      "expected_recommendation_direction": "SQLite for embedded single-node edge; PostgreSQL when replication or concurrent writers matter",
+      "expected_key_considerations": ["embedded", "replication", "concurrent", "footprint", "consistency"]
+    },
+    {
+      "id": "memcached-vs-redis-sessions",
+      "query": "Should I use Redis or Memcached for session storage?",
+      "expected_recommendation_direction": "Redis for richer data structures and persistence options; Memcached for pure ephemeral cache simplicity",
+      "expected_key_considerations": ["persistence", "memory", "simplicity", "latency", "eviction"]
+    }
+  ]
+}

@@ -35,6 +35,7 @@ def base_state(sample_request: DecisionRequest) -> AgentState:
         messages=[HumanMessage(content=sample_request.query)],
         next_agent="",
         research_output=None,
+        retrieved_contexts=[],
         analysis_output=None,
         final_report=None,
         receipt=ExecutionReceipt(request_id=sample_request.id),

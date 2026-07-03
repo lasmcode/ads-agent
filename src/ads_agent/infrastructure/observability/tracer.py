@@ -250,6 +250,44 @@ def submit_pipeline_scores(
     )
 
 
+def submit_evaluation_scores(
+    trace_id: str | None,
+    *,
+    faithfulness: float | None,
+    answer_relevancy: float | None,
+    context_precision: float | None,
+    quality_score: float | None,
+) -> None:
+    """
+    Send RAGAS evaluation scores to Langfuse.
+
+    Scores: faithfulness, answer_relevancy, context_precision, quality_score.
+    """
+    if not trace_id:
+        return
+
+    client = get_langfuse_client()
+    if client is None:
+        return
+
+    score_values: dict[str, float | None] = {
+        "faithfulness": faithfulness,
+        "answer_relevancy": answer_relevancy,
+        "context_precision": context_precision,
+        "quality_score": quality_score,
+    }
+    for name, value in score_values.items():
+        if value is None:
+            continue
+        _safe_call(
+            client.create_score,
+            name=name,
+            value=value,
+            trace_id=trace_id,
+            data_type="NUMERIC",
+        )
+
+
 def compute_pipeline_scores(final_state: dict[str, Any] | Any) -> tuple[bool, int]:
     """Derive score inputs from the final pipeline state."""
     receipt = final_state.get("receipt")

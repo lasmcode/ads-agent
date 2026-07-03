@@ -54,6 +54,7 @@ class ResearchAgentResult:
     input_tokens: int
     output_tokens: int
     source_urls: list[str]
+    retrieved_contexts: list[str]
 
 
 def _extract_urls_from_messages(messages: list[BaseMessage]) -> list[str]:
@@ -133,7 +134,7 @@ def _format_rag_context(chunks: list[Chunk]) -> str:
     )
 
 
-async def _retrieve_rag_context(query: str) -> tuple[str, list[str]]:
+async def _retrieve_rag_context(query: str) -> tuple[str, list[str], list[str]]:
     """
     Consult the internal knowledge base before the ReAct agent reaches for
     MCP web_search — see module docstring.
@@ -144,14 +145,14 @@ async def _retrieve_rag_context(query: str) -> tuple[str, list[str]]:
     fallback, so RAG unavailability degrades quality, not availability.
 
     Returns:
-        (formatted_context, source_urls) — both empty when nothing qualifies.
+        (formatted_context, source_urls, raw_contents) — all empty when nothing qualifies.
     """
     settings = get_settings()
     try:
         chunks = await hybrid_search(query, top_k=settings.rag_top_k)
     except Exception as exc:  # RAG is a best-effort enhancement, never fatal
         log.warning("rag_hybrid_search_failed", error=str(exc))
-        return "", []
+        return "", [], []
 
     high_confidence = [chunk for chunk in chunks if chunk.score >= settings.rag_score_threshold]
     if not high_confidence:
@@ -160,10 +161,15 @@ async def _retrieve_rag_context(query: str) -> tuple[str, list[str]]:
             candidates=len(chunks),
             threshold=settings.rag_score_threshold,
         )
-        return "", []
+        return "", [], []
 
     log.info("rag_context_found", chunks=len(high_confidence))
-    return _format_rag_context(high_confidence), [c.source_url for c in high_confidence]
+    raw_contents = [chunk.content for chunk in high_confidence]
+    return (
+        _format_rag_context(high_confidence),
+        [c.source_url for c in high_confidence],
+        raw_contents,
+    )
 
 
 async def run_research_agent(
@@ -177,7 +183,7 @@ async def run_research_agent(
     settings = get_settings()
     mcp_tools = tools if tools is not None else await get_mcp_tools()
 
-    rag_context, rag_source_urls = await _retrieve_rag_context(query)
+    rag_context, rag_source_urls, retrieved_contexts = await _retrieve_rag_context(query)
     augmented_query = f"{rag_context}\n\n---\n\n{query}" if rag_context else query
 
     model_name = settings.research_model
@@ -220,6 +226,7 @@ async def run_research_agent(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         source_urls=source_urls,
+        retrieved_contexts=retrieved_contexts,
     )
 
 
@@ -272,6 +279,7 @@ async def research_node(state: AgentState) -> dict:
 
         return {
             "research_output": research_output,
+            "retrieved_contexts": agent_result.retrieved_contexts,
             "messages": [AIMessage(content=research_output, name="research")],
             "receipt": receipt,
         }

@@ -4,7 +4,7 @@
 # =============================================================================
 
 .PHONY: help install dev lint lint-fix format format-check check test \
-        test-unit test-integration test-cov test-watch docker-up \
+        test-unit test-integration test-eval test-cov test-watch docker-up \
         docker-down docker-reset docker-logs docker-logs-pg \
         docker-logs-langfuse clean
 
@@ -67,6 +67,10 @@ test-unit: ## Run only unit tests (no external services required)
 
 test-integration: ## Run only integration tests (requires Docker services)
 	uv run pytest -m integration -v
+
+test-eval: ## Golden dataset gate (disabled by default — RUN_QUALITY_GATE=1 to enable)
+	@echo "Quality gate disabled by default. To run: RUN_QUALITY_GATE=1 make test-eval"
+	uv run pytest tests/integration/test_quality_gate.py -m "integration and evaluation" -v
 
 test-cov: ## Run all tests with coverage report on the src package
 	uv run pytest --cov=src/ads_agent --cov-report=term-missing --cov-report=html --no-cov-on-fail
