@@ -42,6 +42,13 @@ from ads_agent.agents.state import AgentState
 from ads_agent.agents.supervisor.nodes import should_continue, supervisor_node
 from ads_agent.agents.writer.nodes import writer_node
 from ads_agent.core.entities.execution_receipt import ExecutionReceipt
+from ads_agent.infrastructure.observability.tracer import (
+    capture_trace_id,
+    compute_pipeline_scores,
+    flush_traces,
+    pipeline_trace,
+    submit_pipeline_scores,
+)
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -147,19 +154,33 @@ async def run_pipeline(
         query_preview=request.query[:80],
     )
 
-    try:
-        final_state = cast(
-            "AgentState",
-            await graph.ainvoke(
-                cast("Any", initial_state),
-                config=cast("Any", config),
-            ),
-        )
-    except Exception as exc:
-        log.error("pipeline_failed", request_id=request.id, error=str(exc))
-        receipt.mark_completed()
-        raise
+    final_state: AgentState | None = None
+    session_id = thread_id or request.id
 
+    with pipeline_trace(request.id, session_id=session_id):
+        receipt.trace_id = capture_trace_id()
+
+        try:
+            final_state = cast(
+                "AgentState",
+                await graph.ainvoke(
+                    cast("Any", initial_state),
+                    config=cast("Any", config),
+                ),
+            )
+        except Exception as exc:
+            log.error("pipeline_failed", request_id=request.id, error=str(exc))
+            receipt.mark_completed()
+            raise
+        else:
+            has_sources, trade_offs_count = compute_pipeline_scores(final_state)
+            submit_pipeline_scores(
+                receipt.trace_id,
+                has_sources=has_sources,
+                trade_offs_count=trade_offs_count,
+            )
+
+    flush_traces()
     receipt.mark_completed()
 
     log.info(
@@ -167,6 +188,7 @@ async def run_pipeline(
         request_id=request.id,
         duration_s=receipt.total_duration_seconds,
         agents_run=len(receipt.agents),
+        trace_id=receipt.trace_id,
     )
 
     return final_state, receipt

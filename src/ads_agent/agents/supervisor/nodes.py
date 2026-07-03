@@ -25,6 +25,11 @@ from ads_agent.core.entities.execution_receipt import AgentMetrics, AgentStatus
 from ads_agent.core.settings import get_settings
 from ads_agent.infrastructure.llm.client import LLMCompletionResult, complete
 from ads_agent.infrastructure.llm.schemas import AnalysisOutput, SupervisorDecision
+from ads_agent.infrastructure.observability.tracer import (
+    agent_span,
+    llm_generation,
+    update_generation,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -173,14 +178,28 @@ async def llm_route(state: AgentState) -> tuple[str | None, LLMCompletionResult 
         {"role": "user", "content": user_content},
     ]
 
+    model = settings.llm_supervisor_model
     try:
-        result = await complete(
-            messages,
-            settings.llm_supervisor_model,
-            response_model=SupervisorDecision,
-            receipt=state.get("receipt"),
-            agent_name="supervisor",
-        )
+        with llm_generation("supervisor-routing", model, messages) as generation:
+            result = await complete(
+                messages,
+                model,
+                response_model=SupervisorDecision,
+                receipt=state.get("receipt"),
+                agent_name="supervisor",
+            )
+            output = (
+                result.parsed.model_dump()
+                if isinstance(result.parsed, SupervisorDecision)
+                else result.raw_content
+            )
+            update_generation(
+                generation,
+                output=output,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                model=model,
+            )
     except Exception as exc:
         log.warning("supervisor_llm_failed", error=str(exc))
         return None, None
@@ -199,67 +218,69 @@ async def supervisor_node(state: AgentState) -> dict:
     Deterministic rules handle clear states; LLM assists on ambiguous ones.
     Circuit breaker and error rules are always enforced in Python first.
     """
-    started_at = datetime.now(UTC)
     current_iterations = state.get("iterations", 0)
-    receipt = state.get("receipt")
-    input_tokens = 0
-    output_tokens = 0
-    used_llm = False
 
-    log.info(
-        "supervisor_routing",
-        iteration=current_iterations,
-        has_research=bool(state.get("research_output")),
-        has_analysis=bool(state.get("analysis_output")),
-        has_report=bool(state.get("final_report")),
-        ambiguous=is_ambiguous_state(state),
-    )
+    with agent_span("supervisor", iteration=current_iterations):
+        started_at = datetime.now(UTC)
+        receipt = state.get("receipt")
+        input_tokens = 0
+        output_tokens = 0
+        used_llm = False
 
-    # --- Circuit breaker (Python authority — no LLM) ---
-    if current_iterations >= MAX_ITERATIONS:
-        log.warning(
-            "circuit_breaker_triggered",
-            iterations=current_iterations,
-            max=MAX_ITERATIONS,
+        log.info(
+            "supervisor_routing",
+            iteration=current_iterations,
+            has_research=bool(state.get("research_output")),
+            has_analysis=bool(state.get("analysis_output")),
+            has_report=bool(state.get("final_report")),
+            ambiguous=is_ambiguous_state(state),
         )
-        if receipt:
-            receipt.circuit_breaker_triggered = True
+
+        # --- Circuit breaker (Python authority — no LLM) ---
+        if current_iterations >= MAX_ITERATIONS:
+            log.warning(
+                "circuit_breaker_triggered",
+                iterations=current_iterations,
+                max=MAX_ITERATIONS,
+            )
+            if receipt:
+                receipt.circuit_breaker_triggered = True
+            return _supervisor_return(
+                next_agent="FINISH",
+                iterations=current_iterations + 1,
+                receipt=receipt,
+                started_at=started_at,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+
+        # --- Routing decision ---
+        if state.get("error"):
+            log.error("supervisor_routing_on_error", error=state["error"])
+            next_agent = "FINISH"
+        elif not is_ambiguous_state(state):
+            next_agent = deterministic_route(state)
+        else:
+            used_llm = True
+            llm_choice, llm_result = await llm_route(state)
+            if llm_result is not None:
+                input_tokens = llm_result.input_tokens
+                output_tokens = llm_result.output_tokens
+            if llm_choice is None:
+                next_agent = deterministic_route(state)
+            else:
+                next_agent = validate_llm_route(state, llm_choice)
+
+        log.info("supervisor_decision", next_agent=next_agent, used_llm=used_llm)
+
         return _supervisor_return(
-            next_agent="FINISH",
+            next_agent=next_agent,
             iterations=current_iterations + 1,
             receipt=receipt,
             started_at=started_at,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
-
-    # --- Routing decision ---
-    if state.get("error"):
-        log.error("supervisor_routing_on_error", error=state["error"])
-        next_agent = "FINISH"
-    elif not is_ambiguous_state(state):
-        next_agent = deterministic_route(state)
-    else:
-        used_llm = True
-        llm_choice, llm_result = await llm_route(state)
-        if llm_result is not None:
-            input_tokens = llm_result.input_tokens
-            output_tokens = llm_result.output_tokens
-        if llm_choice is None:
-            next_agent = deterministic_route(state)
-        else:
-            next_agent = validate_llm_route(state, llm_choice)
-
-    log.info("supervisor_decision", next_agent=next_agent, used_llm=used_llm)
-
-    return _supervisor_return(
-        next_agent=next_agent,
-        iterations=current_iterations + 1,
-        receipt=receipt,
-        started_at=started_at,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-    )
 
 
 def _supervisor_return(

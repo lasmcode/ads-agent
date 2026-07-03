@@ -78,12 +78,13 @@ test-watch: ## Run tests in watch mode (requires pytest-watch plugin)
 # Docker
 # -----------------------------------------------------------------------------
 
-docker-up: ## Start local development services (PostgreSQL + Langfuse)
+docker-up: ## Start local development services (PostgreSQL)
 	docker compose up -d
 	@echo ""
 	@echo "  ✅ Services started:"
 	@echo "  PostgreSQL   → localhost:5432"
-	@echo "  Langfuse     → http://localhost:3000"
+	@echo ""
+	@echo "  Langfuse: configure LANGFUSE_* in .env for Cloud tracing"
 	@echo ""
 
 docker-down: ## Stop all local services
@@ -99,8 +100,8 @@ docker-logs: ## Follow logs from all services
 docker-logs-pg: ## Follow PostgreSQL logs only
 	docker compose logs -f postgres
 
-docker-logs-langfuse: ## Follow Langfuse logs only
-	docker compose logs -f langfuse
+docker-logs-langfuse: ## (Reserved) Langfuse is Cloud-hosted; use cloud.langfuse.com
+	@echo "Langfuse runs on Cloud — set LANGFUSE_HOST=https://cloud.langfuse.com in .env"
 
 # -----------------------------------------------------------------------------
 # Utilities

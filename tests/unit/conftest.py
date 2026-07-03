@@ -79,6 +79,25 @@ async def _mock_complete(messages, model, *, response_model=None, receipt=None, 
 
 
 @pytest.fixture(autouse=True)
+def disable_langfuse_for_unit_tests(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    """
+    Keep unit tests keyless and offline — Langfuse is tested in test_tracer.py
+    and tests/integration/test_langfuse_tracing.py.
+    """
+    if request.node.fspath.basename == "test_tracer.py":
+        return
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(
+        "ads_agent.infrastructure.observability.tracer.get_langfuse_client",
+        lambda: None,
+    )
+
+
+@pytest.fixture(autouse=True)
 def mock_research_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace run_research_agent with a stub for pipeline/CLI unit tests."""
 
