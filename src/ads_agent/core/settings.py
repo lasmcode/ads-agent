@@ -130,7 +130,7 @@ class AppSettings(BaseSettings):
 
     # --- Evaluation Engine (Phase 6) ---
     eval_enabled: bool = Field(
-        default=True,
+        default=False,
         description="Enable fire-and-forget RAGAS evaluation after pipeline completion",
     )
     eval_sample_rate: float = Field(

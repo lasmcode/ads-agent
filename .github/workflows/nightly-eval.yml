@@ -5,8 +5,9 @@
 name: Nightly Evaluation
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
+  # schedule disabled — re-enable when billing/quota ready, then add RUN_QUALITY_GATE: "1" to step env
+  # schedule:
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -55,6 +56,8 @@ jobs:
 
       - name: Run Quality Gate Tests
         id: quality_gate
+        # RUN_QUALITY_GATE is intentionally omitted — tests skip by default (no Gemini calls).
+        # To run for real: add RUN_QUALITY_GATE: "1" to env below.
         run: |
           uv run pytest tests/integration/test_quality_gate.py \
             -m "integration and evaluation" -v --tb=short 2>&1 | tee eval_output.txt
@@ -78,6 +81,8 @@ jobs:
             echo "**Workflow:** ${{ github.workflow }}"
             echo "**Run:** ${{ github.run_number }}"
             echo "**Threshold:** \`EVAL_QUALITY_THRESHOLD=0.75\`"
+            echo ""
+            echo "_Quality gate is disabled by default (RUN_QUALITY_GATE not set). Tests are skipped — no Gemini API calls._"
             echo ""
             if [ "${{ steps.quality_gate.outcome }}" = "success" ]; then
               echo "✅ Quality gate **PASSED**"

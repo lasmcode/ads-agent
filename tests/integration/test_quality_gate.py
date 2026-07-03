@@ -2,7 +2,12 @@
 """
 Quality gate integration test — golden dataset vs real pipeline + RAGAS + DeepEval.
 
-Requires GEMINI_API_KEY. Runs on nightly CI or manual dispatch, not on every PR.
+Disabled by default to preserve Gemini free-tier quota. Opt in explicitly:
+
+    RUN_QUALITY_GATE=1 make test-eval
+
+Also requires GEMINI_API_KEY when enabled. Runs on nightly CI (manual dispatch)
+or local opt-in — not on every PR.
 """
 
 from __future__ import annotations
@@ -33,6 +38,10 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.evaluation,
     pytest.mark.slow,
+    pytest.mark.skipif(
+        os.getenv("RUN_QUALITY_GATE", "").lower() not in ("1", "true", "yes"),
+        reason="Quality gate disabled by default. Set RUN_QUALITY_GATE=1 to enable.",
+    ),
     pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set"),
 ]
 

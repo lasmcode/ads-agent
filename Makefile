@@ -68,7 +68,8 @@ test-unit: ## Run only unit tests (no external services required)
 test-integration: ## Run only integration tests (requires Docker services)
 	uv run pytest -m integration -v
 
-test-eval: ## Run golden dataset quality gate (requires GEMINI_API_KEY)
+test-eval: ## Golden dataset gate (disabled by default — RUN_QUALITY_GATE=1 to enable)
+	@echo "Quality gate disabled by default. To run: RUN_QUALITY_GATE=1 make test-eval"
 	uv run pytest tests/integration/test_quality_gate.py -m "integration and evaluation" -v
 
 test-cov: ## Run all tests with coverage report on the src package

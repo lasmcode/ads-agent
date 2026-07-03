@@ -234,7 +234,8 @@ RAGAS scores pipeline output quality off the critical path; DeepEval gates regre
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ADS_EVAL_ENABLED` | `true` | Enable fire-and-forget RAGAS evaluation |
+| `ADS_EVAL_ENABLED` | `false` | Enable fire-and-forget RAGAS evaluation (opt-in) |
+| `RUN_QUALITY_GATE` | _(unset)_ | Set to `1` to run golden dataset quality gate tests |
 | `ADS_EVAL_SAMPLE_RATE` | `1.0` | Fraction of runs to evaluate (use `0.05–0.15` in production) |
 | `ADS_EVAL_TIMEOUT_SECONDS` | `60` | Max seconds per RAGAS evaluation |
 | `ADS_EVAL_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model for RAGAS metrics |
@@ -260,10 +261,12 @@ Golden dataset: [`tests/fixtures/golden_dataset.json`](tests/fixtures/golden_dat
 make test-unit                                          # includes eval formula + fire-and-forget smoke
 uv run pytest tests/unit/application/test_evaluation_service.py -m unit -v
 uv run pytest tests/unit/test_golden_smoke.py -m unit -v
-make test-eval                                          # full golden gate — requires GEMINI_API_KEY
+make test-eval                                          # skipped by default (no Gemini calls)
+RUN_QUALITY_GATE=1 make test-eval                       # full golden gate — requires GEMINI_API_KEY
+ADS_EVAL_ENABLED=true uv run ads-agent run "..."        # enable runtime RAGAS scoring
 ```
 
-Nightly workflow: [`.github/workflows/nightly-eval.yml`](.github/workflows/nightly-eval.yml) — cron daily + `workflow_dispatch`. Informative only; does not block PRs.
+Nightly workflow: [`.github/workflows/nightly-eval.yml`](.github/workflows/nightly-eval.yml) — `workflow_dispatch` only (cron disabled). Add `RUN_QUALITY_GATE: "1"` to re-enable. Does not block PRs.
 
 ## License
 
