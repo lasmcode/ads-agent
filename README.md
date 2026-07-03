@@ -437,7 +437,15 @@ ads-agent/
 | Supervisor (ambiguous routing) | `gemini/gemini-2.5-pro` | `ADS_LLM_SUPERVISOR_MODEL` |
 | Workers (research, analysis, writer) | `gemini/gemini-2.5-flash` | `ADS_LLM_WORKER_MODEL` / `ADS_RESEARCH_MODEL` |
 
-Deterministic Python rules remain the circuit breaker. The supervisor LLM is consulted only when outputs appear insufficient.
+Deterministic Python rules remain the circuit breaker. The supervisor LLM is consulted only when outputs appear insufficient (short text, insufficiency markers, invalid analysis JSON).
+
+**Langfuse trace hierarchy (per run)**
+
+- Root trace `ads-agent-pipeline` per run, linked via `ExecutionReceipt.trace_id`
+- Nested spans per graph node (`supervisor`, `research`, `analysis`, `writer`)
+- LLM generations with model, input/output, and token usage
+- Post-execution scores: `has_sources`, `trade_offs_count`
+- Async RAGAS scores (fire-and-forget): `faithfulness`, `answer_relevancy`, `context_precision`, `quality_score`
 
 ### Observability verification
 
@@ -446,7 +454,7 @@ Deterministic Python rules remain the circuit breaker. The supervisor LLM is con
 3. Copy the **Trace ID** from the execution receipt
 4. Open [cloud.langfuse.com](https://cloud.langfuse.com) → **Tracing** → search by trace ID
 5. Confirm hierarchy: `ads-agent-pipeline` → `supervisor` / `research` / `analysis` / `writer` spans with nested generations
-6. Check **Scores** for `has_sources`, `trade_offs_count`, and (when `ADS_EVAL_ENABLED=true`) RAGAS metrics
+6. Check **Scores** for `has_sources`, `trade_offs_count`, and (when `ADS_EVAL_ENABLED=true`) RAGAS metrics — RAGAS scores appear after ~1–2s
 
 ---
 
@@ -460,8 +468,58 @@ Deterministic Python rules remain the circuit breaker. The supervisor LLM is con
 - [x] Phase 5 — Langfuse Observability
 - [x] Phase 6 — Evaluation Engine (RAGAS + golden dataset gate)
 - [x] Phase 7 — FastAPI Gateway
+- [ ] Phase 8 — Docker + CI/CD deployment
 
 ---
+
+## Phase 6 — Evaluation Engine
+
+RAGAS scores pipeline output quality off the critical path; DeepEval gates regressions on the golden dataset in nightly CI.
+
+| Metric | Weight | Production threshold | Langfuse score name |
+| --- | --- | --- | --- |
+| Faithfulness | 40% | ≥ 0.85 (`EVAL_FAITHFULNESS_THRESHOLD`) | `faithfulness` |
+| Answer Relevancy | 35% | ≥ 0.80 (`EVAL_ANSWER_RELEVANCY_THRESHOLD`) | `answer_relevancy` |
+| Context Precision | 25% | ≥ 0.75 (`EVAL_CONTEXT_PRECISION_THRESHOLD`) | `context_precision` |
+| **Quality score** | weighted avg | ≥ 0.75 batch (`EVAL_QUALITY_THRESHOLD`) | `quality_score` |
+
+**Weighted formula:** `quality_score = 0.40×faithfulness + 0.35×answer_relevancy + 0.25×context_precision` (weights renormalized when context precision is unavailable).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ADS_EVAL_ENABLED` | `false` | Enable fire-and-forget RAGAS evaluation (opt-in) |
+| `RUN_QUALITY_GATE` | _(unset)_ | Set to `1` to run golden dataset quality gate tests |
+| `ADS_EVAL_SAMPLE_RATE` | `1.0` | Fraction of runs to evaluate (use `0.05–0.15` in production) |
+| `ADS_EVAL_TIMEOUT_SECONDS` | `60` | Max seconds per RAGAS evaluation |
+| `ADS_EVAL_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model for RAGAS metrics |
+| `EVAL_QUALITY_THRESHOLD` | `0.75` | Nightly batch gate threshold |
+
+Golden dataset: [`tests/fixtures/golden_dataset.json`](tests/fixtures/golden_dataset.json) (11 architecture questions).
+
+### Interpreting low Faithfulness (< 0.85)
+
+**Scenario:** Query "pgvector vs Qdrant" → Faithfulness = 0.62
+
+**What it means:** ~38% of claims in the report are not supported by retrieved chunks. Example: the report states "Qdrant supports native ACID transactions" but no chunk mentions it.
+
+**What to check first:**
+
+1. **Retrieval** (if `context_precision` is also low < 0.75): Did `hybrid_search` return relevant chunks? In Langfuse, open the `research` span and compare `receipt.source_urls` to cited facts. Tune `ADS_RAG_SCORE_THRESHOLD`, re-ingest docs, or improve chunking.
+2. **Writer prompt** (if `context_precision` is OK but faithfulness is low): Chunks were correct but the writer distorted them. Review `WRITER_SYSTEM_PROMPT` — reinforce "only cite facts from research_output".
+3. **Research agent** (if both metrics are low): ReAct agent failed to extract evidence from MCP/RAG. Review `RESEARCH_SYSTEM_PROMPT` and tool usage.
+
+### Verification commands
+
+```bash
+make test-unit                                          # includes eval formula + fire-and-forget smoke
+uv run pytest tests/unit/application/test_evaluation_service.py -m unit -v
+uv run pytest tests/unit/test_golden_smoke.py -m unit -v
+make test-eval                                          # skipped by default (no Gemini calls)
+RUN_QUALITY_GATE=1 make test-eval                       # full golden gate — requires GEMINI_API_KEY
+ADS_EVAL_ENABLED=true uv run ads-agent run "..."        # enable runtime RAGAS scoring
+```
+
+Nightly workflow: [`.github/workflows/nightly-eval.yml`](.github/workflows/nightly-eval.yml) — `workflow_dispatch` only (cron disabled). Add `RUN_QUALITY_GATE: "1"` to re-enable. Does not block PRs.
 
 ## License
 
