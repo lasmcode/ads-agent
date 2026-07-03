@@ -305,6 +305,8 @@ def _supervisor_return(
         )
         receipt.add_agent_metrics(supervisor_metrics)
         receipt.iterations = iterations
+        if next_agent == "FINISH":
+            receipt.mark_completed()
 
     return {
         "next_agent": next_agent,

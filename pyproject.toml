@@ -8,7 +8,7 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.136.3",
+    "fastapi>=0.139.0",
     "fastmcp>=3.3.1",
     "httpx>=0.28.1",
     "langchain>=1.3.2",
@@ -64,6 +64,7 @@ dev = [
 [project.scripts]
 ads-agent = "ads_agent.cli:main"
 ads-agent-mcp = "ads_agent.infrastructure.mcp.server:main"
+ads-agent-api = "ads_agent.api.main:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ads_agent"]
@@ -93,6 +94,14 @@ force-sort-within-sections = true
 "src/ads_agent/agents/state.py" = [
     "TC001",  # LangGraph resolves TypedDict annotations at runtime
     "TC002",
+]
+"src/ads_agent/api/**/*.py" = [
+    "TC001",  # FastAPI Depends() annotations resolve at runtime
+    "TC002",
+    "TC003",
+]
+"src/ads_agent/application/services/decision_service.py" = [
+    "TC001",  # AppSettings used in runtime function signatures
 ]
 
 [tool.ruff.format]

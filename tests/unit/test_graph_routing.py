@@ -279,4 +279,6 @@ async def test_pipeline_persists_checkpoint(
     assert snapshot.values is not None
     assert snapshot.values.get("final_report") is not None
     assert snapshot.values["request"].id == sample_request.id
-    assert snapshot.values["receipt"].completed_at is None
+    assert snapshot.values["receipt"].completed_at is not None
+    assert snapshot.values["receipt"].total_duration_seconds is not None
+    assert snapshot.values["receipt"].total_duration_seconds >= 0
